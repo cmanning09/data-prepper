@@ -49,6 +49,7 @@ public class FileSourceTests {
 
     private static final String TEST_PIPELINE_NAME = "pipeline";
     private static final String TEST_FILE_PATH_PLAIN = "src/test/resources/test-file-source-plain.tst";
+    private static final String TEST_FILE_PATH_LARGER_THAN_BUFFER = "src/test/resources/test-file-source-plain.tst";
     private static final String TEST_FILE_PATH_JSON = "src/test/resources/test-file-source-json.tst";
     private static final String TEST_FILE_PATH_INVALID_JSON = "src/test/resources/test-file-source-invalid-json.tst";
     private static final String FILE_DOES_NOT_EXIST = "file_does_not_exist";
@@ -67,6 +68,7 @@ public class FileSourceTests {
     private Map<String, Object> pluginSettings;
 
     private List<Record<Object>> expectedEventsPlain;
+    private List<Record<Object>> expectedExtraEventsPlain;
     private List<Record<Object>> expectedEventsJson;
     private List<Record<Object>> expectedEventsInvalidJson;
 
@@ -75,6 +77,7 @@ public class FileSourceTests {
     public void setup() {
         pluginSettings = new HashMap<>();
         expectedEventsPlain = new ArrayList<>();
+        expectedExtraEventsPlain = new ArrayList<>();
         expectedEventsJson = new ArrayList<>();
         expectedEventsInvalidJson = new ArrayList<>();
 
@@ -91,6 +94,16 @@ public class FileSourceTests {
 
         expectedEventsPlain.add(firstEventPlain);
         expectedEventsPlain.add(secondEventPlain);
+
+        // larger than buffer
+        final String expectedPlainThirdLine = "THIS IS A THIRD LINE";
+        final String expectedPlainFourthLine = "THIS IS A FOURTH LINE";
+
+        final Record<Object> thirdEventPlain = createRecordEventWithKeyValuePair(FileSource.MESSAGE_KEY, expectedPlainThirdLine);
+        final Record<Object> fourthEventPlain = createRecordEventWithKeyValuePair(FileSource.MESSAGE_KEY, expectedPlainFourthLine);
+
+        expectedExtraEventsPlain.add(thirdEventPlain);
+        expectedExtraEventsPlain.add(fourthEventPlain);
 
         //json
         final String expectedJsonFirstLine = "{\"test_key: \"test_value\"}";
@@ -214,6 +227,24 @@ public class FileSourceTests {
     public void testNonSupportedFileTypeThrowsIllegalArgumentException() {
         pluginSettings.put(FileSourceConfig.ATTRIBUTE_TYPE, "bad_type");
         assertThrows(IllegalArgumentException.class, this::createObjectUnderTest);
+    }
+
+    public void testFullBufferDoesNotThrowException() {
+        pluginSettings.put(FileSourceConfig.ATTRIBUTE_PATH, TEST_FILE_PATH_LARGER_THAN_BUFFER);
+        pluginSettings.put(FileSourceConfig.ATTRIBUTE_FORMAT, "json");
+
+        fileSource = createObjectUnderTest();
+        fileSource.start(buffer);
+
+        final List<Record<Object>> firstSetOfData = new ArrayList<>(buffer.read(1000).getKey());
+
+        assertThat(firstSetOfData.size(), equalTo(expectedEventsJson.size()));
+        assertExpectedRecordsAreEqual(expectedEventsJson, firstSetOfData);
+
+        final List<Record<Object>> secondSetOfData = new ArrayList<>(buffer.read(1000).getKey());
+
+        assertThat(secondSetOfData.size(), equalTo(expectedExtraEventsPlain.size()));
+        assertExpectedRecordsAreEqual(expectedExtraEventsPlain, secondSetOfData);
     }
 
     static void assertExpectedRecordsAreEqual(final List<Record<Object>> expectedEvents, final List<Record<Object>> actualEvents) {

@@ -65,9 +65,9 @@ public class FileSource implements Source<Record<Object>> {
         try (BufferedReader reader = Files.newBufferedReader(Paths.get(fileSourceConfig.getFilePathToRead()), StandardCharsets.UTF_8)) {
             String line;
             while ((line = reader.readLine()) != null && !isStopRequested) {
-                writeLineAsEventOrString(line, buffer);
+                handleWrite(line, buffer);
             }
-        } catch (IOException | TimeoutException | IllegalArgumentException ex) {
+        } catch (IOException | IllegalArgumentException ex) {
             LOG.error("Error processing the input file path [{}]", fileSourceConfig.getFilePathToRead(), ex);
             throw new RuntimeException(format("Error processing the input file %s",
                     fileSourceConfig.getFilePathToRead()), ex);
@@ -106,6 +106,18 @@ public class FileSource implements Source<Record<Object>> {
             final Map<String, Object> plainMap = new HashMap<>();
             plainMap.put(MESSAGE_KEY, jsonString);
             return plainMap;
+        }
+    }
+
+    private void handleWrite(final String line, final Buffer<Record<Object>> buffer) {
+        boolean recordIsUnwritten = true;
+        while (recordIsUnwritten) {
+            try {
+                writeLineAsEventOrString(line, buffer);
+                recordIsUnwritten = false;
+            } catch (final TimeoutException e) {
+                LOG.debug("Buffer is full, retrying...");
+            }
         }
     }
 
